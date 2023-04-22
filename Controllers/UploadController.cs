@@ -5,7 +5,9 @@ using System.Threading.Tasks;
 using LargeFileUploader.Attributes;
 using LargeFileUploader.Exceptions;
 using LargeFileUploader.Helpers;
+using LargeFileUploader.Services;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Net.Http.Headers;
@@ -16,19 +18,33 @@ namespace LargeFileUploader.Controllers
     [ApiController]
     public class UploadController : ControllerBase
     {
+        private readonly IAzureBlobService _azureBlobService;
+
+        public UploadController(IAzureBlobService azureBlobService)
+        {
+            _azureBlobService = azureBlobService;
+        }
+
         private const long MaxFileSize = 10L * 1024L * 1024L * 1024L; // 10GB, adjust to your need
         private const int LengthLimit = 70;
-        
+
         [HttpPost]
         [DisableFormValueModelBinding]
         [RequestSizeLimit(MaxFileSize)]
         [RequestFormLimits(MultipartBodyLengthLimit = MaxFileSize)]
         public async Task ReceiveFile()
         {
+            var syncIoFeature = this.HttpContext.Features.Get<IHttpBodyControlFeature>();
+            if (syncIoFeature != null)
+            {
+                syncIoFeature.AllowSynchronousIO = true;
+            }
+
             if (Request.ContentType != null && !MultipartRequestHelper.IsMultipartContentType(Request.ContentType))
                 throw new BadRequestException("Not a multipart request");
 
-            var boundary = MultipartRequestHelper.GetBoundary(MediaTypeHeaderValue.Parse(Request.ContentType), LengthLimit);
+            var boundary =
+                MultipartRequestHelper.GetBoundary(MediaTypeHeaderValue.Parse(Request.ContentType), LengthLimit);
             var reader = new MultipartReader(boundary, Request.Body);
 
             // note: this is for a single file, you could also process multiple files
@@ -49,7 +65,8 @@ namespace LargeFileUploader.Controllers
             if (string.IsNullOrEmpty(fileName))
                 throw new BadRequestException("No filename defined.");
 
-            using var fileStream = section.Body;
+            await using var fileStream = section.Body;
+            await this._azureBlobService.ProcessBlob(fileStream, fileName);
             // await SendFileSomewhere(fileStream);
         }
 
@@ -65,7 +82,5 @@ namespace LargeFileUploader.Controllers
         //     using var response = await _httpClient.SendAsync(request);
         //     // TODO check response status etc.
         // }
-
-        
     }
 }
