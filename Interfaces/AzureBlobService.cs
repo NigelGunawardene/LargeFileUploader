@@ -25,34 +25,58 @@ public class AzureBlobService : IAzureBlobService
         using var archive = new ZipArchive(stream);
         foreach (var entry in archive.Entries.Where(e => !string.IsNullOrEmpty(e.Name)))
         {
-            await using var entryStream = entry.Open();
-            await AddFileToBlobStorage(stream, fileName);
+            // var asd = new ReadSeekableStream(archive.Entries.First().Open(), 80);
+            // await using var entryStream = new SeekableReadOnlyStream(entry.Open(), Convert.ToInt32(entry.Length)); // works
+            
+            // ReadableSeekStream and PeekableStream do not work due to the DeflateStream having Length unsupported
+            await using var entryStream = new SeekStream(entry.Open(), Convert.ToInt32(entry.Length)); // works
+            // await using var entryStream = entry.Open();
+            await AddFileToBlobStorage(entryStream, entry.Name);
         }
     }
     
     // upload stream to azure blob
     public async Task AddFileToBlobStorage(Stream stream, string fileName)
     {
-        var blobStream = new PipeStream();
-        var hashStream = new PipeStream();
- 
+        // setup - create new ID, as well as necessary azure blob components
         var blobName = Guid.NewGuid().ToString();
- 
         var blobContainerClient = this._blobServiceClient.GetBlobContainerClient(this._blobStorageSettings.ContainerName);
         await blobContainerClient.CreateIfNotExistsAsync();
- 
         var blobClient = blobContainerClient.GetBlobClient(blobName);
- 
-        var fileWriteTask = Task.Run(async () => await blobClient.UploadAsync(blobStream));
- 
+        
+        // reset stream and calculate hash
+        stream.Seek(0, SeekOrigin.Begin);
         var sha512 = SHA512.Create();
-        var hashTask = Task.Run(async () => await sha512.ComputeHashAsync(hashStream));
- 
-        var distributeTask = Task.Run(async () => await DistributeAsync(stream, new[] { blobStream, hashStream }));
- 
-        await Task.WhenAll(distributeTask, hashTask, fileWriteTask);
- 
+        var hashTask = await sha512.ComputeHashAsync(stream);
         var hash = sha512.Hash != null ? string.Concat(sha512.Hash.Select(b => b.ToString("x2"))) : string.Empty;
+
+        // reset stream and upload blob
+        stream.Seek(0, SeekOrigin.Begin);
+        await blobClient.UploadAsync(stream);
+
+        # region old way of doing the upload, where we duplicate the stream and read each individually
+        // var blobStream = new PipeStream();
+        // var hashStream = new PipeStream();
+        //
+        // var blobName = Guid.NewGuid().ToString();
+        //
+        // var blobContainerClient = this._blobServiceClient.GetBlobContainerClient(this._blobStorageSettings.ContainerName);
+        // await blobContainerClient.CreateIfNotExistsAsync();
+        //
+        // var blobClient = blobContainerClient.GetBlobClient(blobName);
+        //
+        // var fileWriteTask = Task.Run(async () => await blobClient.UploadAsync(blobStream));
+        //
+        // var sha512 = SHA512.Create();
+        // var hashTask = Task.Run(async () => await sha512.ComputeHashAsync(hashStream));
+        //
+        // var distributeTask = Task.Run(async () => await DistributeAsync(stream, new[] { blobStream, hashStream }));
+        //
+        // await Task.WhenAll(distributeTask, hashTask, fileWriteTask);
+        //
+        // var hash = sha512.Hash != null ? string.Concat(sha512.Hash.Select(b => b.ToString("x2"))) : string.Empty;
+        #endregion
+        
         var response = await blobClient.SetMetadataAsync(new Dictionary<string, string>
         {
             { "path", Path.GetDirectoryName(fileName)! },
@@ -60,7 +84,7 @@ public class AzureBlobService : IAzureBlobService
             { "fullName", fileName },
             { "hash", hash },
         });
- 
+
         // if (response is not null)
         // {
         //     // create blueprint
