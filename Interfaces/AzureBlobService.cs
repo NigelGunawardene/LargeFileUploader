@@ -5,6 +5,8 @@ using LargeFileUploader.Services;
 using LargeFileUploader.Settings;
 using LargeFileUploader.Streaming;
 using Microsoft.Extensions.Options;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace LargeFileUploader.Interfaces;
 
@@ -23,17 +25,60 @@ public class AzureBlobService : IAzureBlobService
     {
         stream.Seek(0, SeekOrigin.Begin);
         using var archive = new ZipArchive(stream);
-        foreach (var entry in archive.Entries.Where(e => !string.IsNullOrEmpty(e.Name)))
+        
+        Node result = new Node();
+        
+        foreach (var entry in archive.Entries)
         {
-            // var asd = new ReadSeekableStream(archive.Entries.First().Open(), 80);
-            // await using var entryStream = new SeekableReadOnlyStream(entry.Open(), Convert.ToInt32(entry.Length)); // works
-            
-            // ReadableSeekStream and PeekableStream do not work due to the DeflateStream having Length unsupported
-            await using var entryStream = new SeekStream(entry.Open(), Convert.ToInt32(entry.Length)); // works
-            // await using var entryStream = entry.Open();
-            await AddFileToBlobStorage(entryStream, entry.Name);
+            string[] parts = entry.FullName.Split('/');
+            Node current = result;
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string part = parts[i];
+                if (i == parts.Length - 1 && !String.IsNullOrEmpty(entry.Name))
+                {
+                    Node file = new Node();
+                    file.Name = part;
+                    file.Type = "file";
+                    current.Children.Add(file);
+                }
+                else
+                {
+                    if (!string.IsNullOrEmpty(part))
+                    {
+                        Node directory = current.Children.FirstOrDefault(o => o.Name == part);
+                        if (directory == null)
+                        {
+                            directory = new Node();
+                            directory.Name = part;
+                            directory.Type = "directory";
+                            current.Children.Add(directory);
+                        }
+                    current = directory;
+                    }
+
+                }
+            }
+
+            if (!string.IsNullOrEmpty(entry.Name))
+            {
+                await using var entryStream = new SeekStream(entry.Open(), Convert.ToInt32(entry.Length));
+                await AddFileToBlobStorage(entryStream, entry.Name);
+            }
+
         }
-    }
+            var serializedString = JsonConvert.SerializeObject(result);
+
+
+            // foreach (var entry in archive.Entries.Where(e => !string.IsNullOrEmpty(e.Name)))
+        // {
+        //     await using var entryStream = new SeekStream(entry.Open(), Convert.ToInt32(entry.Length)); // works
+        //     // await using var entryStream = new SeekableReadOnlyStream(entry.Open(), Convert.ToInt32(entry.Length)); // works
+        //     // ReadableSeekStream and PeekableStream do not work due to the DeflateStream having Length unsupported
+        //     // await using var entryStream = entry.Open();
+        //     await AddFileToBlobStorage(entryStream, entry.Name);
+        // }
+     }
     
     // upload stream to azure blob
     public async Task AddFileToBlobStorage(Stream stream, string fileName)
@@ -115,5 +160,12 @@ public class AzureBlobService : IAzureBlobService
         {
             pipeStream.Complete();
         }
+    }
+    
+    class Node
+    {
+        public string Name { get; set; }
+        public string Type { get; set; }
+        public List<Node> Children { get; set; } = new List<Node>();
     }
 }
