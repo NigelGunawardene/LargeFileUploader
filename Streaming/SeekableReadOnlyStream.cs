@@ -45,24 +45,25 @@
 //---------------------------------------------------------------------
 
 
-using System;
-using System.IO;
 using System.Diagnostics;
-
 
 namespace LargeFileUploader.Streaming;
 
 /// <summary>
-/// Implements a seekable read-only stream which uses buffering if
-/// underlying stream is not seekable. Buffer in memory has size
-/// threshold and overflows to disk (temporary file) if number of bytes.
+///     Implements a seekable read-only stream which uses buffering if
+///     underlying stream is not seekable. Buffer in memory has size
+///     threshold and overflows to disk (temporary file) if number of bytes.
 /// </summary>
 public class SeekableReadOnlyStream : Stream
 
 {
+    private readonly Stream baseStream;
+
+    private readonly Stream bufferingStream;
+
     /// <summary>
-    /// Initializes a SeekableReadOnlyStream instance with base stream and 
-    /// buffering stream.
+    ///     Initializes a SeekableReadOnlyStream instance with base stream and
+    ///     buffering stream.
     /// </summary>
     /// <param name="baseStream">Base stream</param>
     /// <param name="overflowStream">Buffering stream</param>
@@ -92,8 +93,8 @@ public class SeekableReadOnlyStream : Stream
 
 
     /// <summary>
-    /// Initializes a SeekableReadOnlyStream instance with base stream and inherently uses
-    /// VirtualStream instance as buffering stream.
+    ///     Initializes a SeekableReadOnlyStream instance with base stream and inherently uses
+    ///     VirtualStream instance as buffering stream.
     /// </summary>
     /// <param name="baseStream">Base stream</param>
     public SeekableReadOnlyStream(Stream baseStream) : this(baseStream, new VirtualStream())
@@ -104,8 +105,8 @@ public class SeekableReadOnlyStream : Stream
 
 
     /// <summary>
-    /// Initializes a SeekableReadOnlyStream instance with base stream and buffer size, and 
-    /// inherently uses VirtualStream instance as buffering stream.
+    ///     Initializes a SeekableReadOnlyStream instance with base stream and buffer size, and
+    ///     inherently uses VirtualStream instance as buffering stream.
     /// </summary>
     /// <param name="baseStream">Base stream</param>
     /// <param name="bufferSize">Buffer size</param>
@@ -117,36 +118,24 @@ public class SeekableReadOnlyStream : Stream
 
 
     /// <summary>
-    /// Gets a flag indicating whether this stream can be read.
+    ///     Gets a flag indicating whether this stream can be read.
     /// </summary>
 
-    public override bool CanRead
-
-    {
-        get { return true; }
-    }
+    public override bool CanRead => true;
 
 
     /// <summary>
-    /// Gets a flag indicating whether this stream can be written to.
+    ///     Gets a flag indicating whether this stream can be written to.
     /// </summary>
 
-    public override bool CanWrite
-
-    {
-        get { return false; }
-    }
+    public override bool CanWrite => false;
 
 
-    public override bool CanSeek
-
-    {
-        get { return true; }
-    }
+    public override bool CanSeek => true;
 
 
     /// <summary>
-    /// Gets or sets a stream position.
+    ///     Gets or sets a stream position.
     /// </summary>
 
     public override long Position
@@ -223,16 +212,16 @@ public class SeekableReadOnlyStream : Stream
 
                 // in 4K chunks
 
-                byte[] buffer = new byte[4096];
+                var buffer = new byte[4096];
 
-                long bytesToRead = value - bufferingStream.Position;
+                var bytesToRead = value - bufferingStream.Position;
 
                 while (bytesToRead > 0)
 
                 {
                     // Read to buffer 4K or byteToRead, whichever is less
 
-                    int bytesRead = baseStream.Read(buffer, 0, (int)Math.Min(bytesToRead, buffer.Length));
+                    var bytesRead = baseStream.Read(buffer, 0, (int)Math.Min(bytesToRead, buffer.Length));
 
 
                     // Check if any bytes were read
@@ -268,8 +257,51 @@ public class SeekableReadOnlyStream : Stream
 
 
     /// <summary>
-    /// Seeks in stream. For this stream can be very expensive because entire base stream 
-    /// can be dumped into buffering stream if SeekOrigin.End is used.
+    ///     Gets the length in bytes of the stream. For this stream can be very expensive
+    ///     because entire base stream will be dumped into buffering stream.
+    /// </summary>
+
+    public override long Length
+
+    {
+        get
+
+        {
+            // Check if base stream is seekable
+
+            if (baseStream.CanSeek)
+
+                return baseStream.Length;
+
+
+            // Preserve the current stream position
+
+            var position = Position;
+
+
+            // Seek to the end of stream
+
+            Seek(0, SeekOrigin.End);
+
+
+            // Length will be equal to the current position
+
+            var length = Position;
+
+
+            // Restore the current stream position
+
+            Position = position;
+
+
+            return length;
+        }
+    }
+
+
+    /// <summary>
+    ///     Seeks in stream. For this stream can be very expensive because entire base stream
+    ///     can be dumped into buffering stream if SeekOrigin.End is used.
     /// </summary>
     /// <param name="offset">A byte offset relative to the origin parameter</param>
     /// <param name="origin">A value of type SeekOrigin indicating the reference point used to obtain the new position</param>
@@ -329,14 +361,14 @@ public class SeekableReadOnlyStream : Stream
 
             // Read all remaining bytes from the base stream to the buffering stream
 
-            byte[] buffer = new byte[4096];
+            var buffer = new byte[4096];
 
             for (;;)
 
             {
                 // Read buffer from base stream
 
-                int bytesRead = baseStream.Read(buffer, 0, buffer.Length);
+                var bytesRead = baseStream.Read(buffer, 0, buffer.Length);
 
 
                 // Break the reading loop if the base stream is exhausted
@@ -367,55 +399,22 @@ public class SeekableReadOnlyStream : Stream
 
 
     /// <summary>
-    /// Gets the length in bytes of the stream. For this stream can be very expensive
-    /// because entire base stream will be dumped into buffering stream.
+    ///     Reads a sequence of bytes from the current stream and advances the position within the stream by the number of
+    ///     bytes read.
     /// </summary>
-
-    public override long Length
-
-    {
-        get
-
-        {
-            // Check if base stream is seekable
-
-            if (baseStream.CanSeek)
-
-                return baseStream.Length;
-
-
-            // Preserve the current stream position
-
-            long position = Position;
-
-
-            // Seek to the end of stream
-
-            Seek(0, SeekOrigin.End);
-
-
-            // Length will be equal to the current position
-
-            long length = Position;
-
-
-            // Restore the current stream position
-
-            Position = position;
-
-
-            return length;
-        }
-    }
-
-
-    /// <summary>
-    /// Reads a sequence of bytes from the current stream and advances the position within the stream by the number of bytes read.
-    /// </summary>
-    /// <param name="buffer">An array of bytes. When this method returns, the buffer contains the specified byte array with the values between offset and (offset + count- 1) replaced by the bytes read from the current source</param>
-    /// <param name="offset">The zero-based byte offset in buffer at which to begin storing the data read from the current stream</param>
+    /// <param name="buffer">
+    ///     An array of bytes. When this method returns, the buffer contains the specified byte array with the
+    ///     values between offset and (offset + count- 1) replaced by the bytes read from the current source
+    /// </param>
+    /// <param name="offset">
+    ///     The zero-based byte offset in buffer at which to begin storing the data read from the current
+    ///     stream
+    /// </param>
     /// <param name="count">The maximum number of bytes to be read from the current stream</param>
-    /// <returns>The total number of bytes read into the buffer. This can be less than the number of bytes requested if that many bytes are not currently available, or zero (0) if the end of the stream has been reached</returns>
+    /// <returns>
+    ///     The total number of bytes read into the buffer. This can be less than the number of bytes requested if that
+    ///     many bytes are not currently available, or zero (0) if the end of the stream has been reached
+    /// </returns>
     public override int Read(byte[] buffer, int offset, int count)
 
     {
@@ -426,7 +425,7 @@ public class SeekableReadOnlyStream : Stream
             return baseStream.Read(buffer, offset, count);
 
 
-        int bytesReadTotal = 0;
+        var bytesReadTotal = 0;
 
 
         // Check if buffering stream has some bytes to read, starting from the
@@ -469,18 +468,14 @@ public class SeekableReadOnlyStream : Stream
 
             // Read count bytes from the base stream starting from offset
 
-            int bytesRead = baseStream.Read(buffer, offset, count);
+            var bytesRead = baseStream.Read(buffer, offset, count);
 
 
             // Check if bytes were really read
 
             if (bytesRead > 0)
-
-            {
                 // Write number of read bytes to the buffering stream starting from offset in buffer
-
                 bufferingStream.Write(buffer, offset, bytesRead);
-            }
 
 
             // Add number of bytes read at this step to the number of totally read bytes
@@ -494,7 +489,7 @@ public class SeekableReadOnlyStream : Stream
 
 
     /// <summary>
-    /// Writes to stream.
+    ///     Writes to stream.
     /// </summary>
     /// <param name="buffer">Buffer to write to stream</param>
     /// <param name="offset">Stream offset to start write from</param>
@@ -508,7 +503,7 @@ public class SeekableReadOnlyStream : Stream
 
 
     /// <summary>
-    /// Set stream length.
+    ///     Set stream length.
     /// </summary>
     /// <param name="value">Stream length</param>
     /// <exception cref="NotSupportedException">Is thrown always</exception>
@@ -520,7 +515,7 @@ public class SeekableReadOnlyStream : Stream
 
 
     /// <summary>
-    /// Closes base and buffering streams.
+    ///     Closes base and buffering streams.
     /// </summary>
     public override void Close()
 
@@ -534,7 +529,7 @@ public class SeekableReadOnlyStream : Stream
 
 
     /// <summary>
-    /// Flushes the stream.
+    ///     Flushes the stream.
     /// </summary>
     public override void Flush()
 
@@ -543,9 +538,4 @@ public class SeekableReadOnlyStream : Stream
 
         bufferingStream.Flush();
     }
-
-
-    private Stream baseStream;
-
-    private Stream bufferingStream;
 }

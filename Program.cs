@@ -17,7 +17,6 @@ builder.Services.Configure<AzureBlobStorageSettings>(builder.Configuration.GetSe
 builder.Services.Configure<IISServerOptions>(options =>
 {
     options.MaxRequestBodySize = int.MaxValue; // or your desired value
-    
 });
 
 

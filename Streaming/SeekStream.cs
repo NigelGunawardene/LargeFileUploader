@@ -1,70 +1,56 @@
-﻿using System;
-using System.IO;
-
-namespace LargeFileUploader.Streaming;
+﻿namespace LargeFileUploader.Streaming;
 
 /// <summary>
-/// SeekStream allows seeking on non-seekable streams by buffering read data. The stream is not writable yet.
+///     SeekStream allows seeking on non-seekable streams by buffering read data. The stream is not writable yet.
 /// </summary>
 public class SeekStream : Stream
 {
-    private readonly Stream _baseStream;
-    private readonly MemoryStream _innerStream;
-    private readonly int _bufferSize = 64 * 1024;
     private readonly byte[] _buffer;
+    private readonly int _bufferSize = 64 * 1024;
+    private readonly MemoryStream _innerStream;
 
     public SeekStream(Stream baseStream)
         : this(baseStream, 64 * 1024)
     {
     }
 
-    public SeekStream(Stream baseStream, int bufferSize) : base()
+    public SeekStream(Stream baseStream, int bufferSize)
     {
-        _baseStream = baseStream;
+        BaseStream = baseStream;
         _bufferSize = bufferSize;
         _buffer = new byte[_bufferSize];
         _innerStream = new MemoryStream();
     }
 
-    public override bool CanRead
-    {
-        get { return _baseStream.CanRead; }
-    }
+    public override bool CanRead => BaseStream.CanRead;
 
-    public override bool CanSeek
-    {
-        get { return _baseStream.CanRead; }
-    }
+    public override bool CanSeek => BaseStream.CanRead;
 
-    public override bool CanWrite
-    {
-        get { return false; }
-    }
+    public override bool CanWrite => false;
 
     public override long Position
     {
-        get { return _innerStream.Position; }
+        get => _innerStream.Position;
         set
         {
-            if (value > _baseStream.Position)
+            if (value > BaseStream.Position)
                 FastForward(value);
             _innerStream.Position = value;
         }
     }
 
-    public Stream BaseStream
-    {
-        get { return _baseStream; }
-    }
+    public Stream BaseStream { get; }
+
+    public override long Length => _innerStream.Length;
 
     public override void Flush()
     {
-        _baseStream.Flush();
+        BaseStream.Flush();
     }
 
     private void FastForward(long position = -1)
     {
-        while ((position == -1 || position > this.Length) && ReadChunk() > 0)
+        while ((position == -1 || position > Length) && ReadChunk() > 0)
         {
             // fast-forward
         }
@@ -73,10 +59,10 @@ public class SeekStream : Stream
     private int ReadChunk()
     {
         int thisRead, read = 0;
-        long pos = _innerStream.Position;
+        var pos = _innerStream.Position;
         do
         {
-            thisRead = _baseStream.Read(_buffer, 0, _bufferSize - read);
+            thisRead = BaseStream.Read(_buffer, 0, _bufferSize - read);
             _innerStream.Write(_buffer, 0, thisRead);
             read += thisRead;
         } while (read < _bufferSize && thisRead > 0);
@@ -93,7 +79,7 @@ public class SeekStream : Stream
 
     public override int ReadByte()
     {
-        FastForward(this.Position + 1);
+        FastForward(Position + 1);
         return base.ReadByte();
     }
 
@@ -114,13 +100,8 @@ public class SeekStream : Stream
         if (!disposing)
         {
             _innerStream.Dispose();
-            _baseStream.Dispose();
+            BaseStream.Dispose();
         }
-    }
-
-    public override long Length
-    {
-        get { return _innerStream.Length; }
     }
 
     public override void SetLength(long value)

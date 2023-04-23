@@ -45,25 +45,22 @@
 //---------------------------------------------------------------------
 
 
-using System;
-using System.IO;
-using System.Text;
 using System.Runtime.InteropServices;
+using System.Text;
 using Microsoft.Win32.SafeHandles;
-
 
 namespace LargeFileUploader.Streaming;
 
 /// <summary>
-/// Implements a virtual stream, i.e. the always seekable stream which
-/// uses configurable amount of memory to reduce a memory footprint and 
-/// temporarily stores remaining data in a temporary file on disk.
+///     Implements a virtual stream, i.e. the always seekable stream which
+///     uses configurable amount of memory to reduce a memory footprint and
+///     temporarily stores remaining data in a temporary file on disk.
 /// </summary>
 public sealed class VirtualStream : Stream, IDisposable
 
 {
     /// <summary>
-    /// Memory handling.
+    ///     Memory handling.
     /// </summary>
     public enum MemoryFlag
 
@@ -82,21 +79,21 @@ public sealed class VirtualStream : Stream, IDisposable
 
     private const int DefaultMemorySize = 4 * 1024; // Default memory consumption (4Kb)
 
-
-    private Stream wrappedStream;
-
     private bool isDisposed;
 
     private bool isInMemory;
 
-    private int thresholdSize;
+    private readonly MemoryFlag memoryStatus;
 
-    private MemoryFlag memoryStatus;
+    private readonly int thresholdSize;
+
+
+    private Stream wrappedStream;
 
 
     /// <summary>
-    /// Initializes a VirtualStream instance with default parameters (10K memory buffer,
-    /// allow overflow to disk).
+    ///     Initializes a VirtualStream instance with default parameters (10K memory buffer,
+    ///     allow overflow to disk).
     /// </summary>
     public VirtualStream()
         : this(DefaultMemorySize, MemoryFlag.AutoOverFlowToDisk, new MemoryStream())
@@ -106,7 +103,7 @@ public sealed class VirtualStream : Stream, IDisposable
 
 
     /// <summary>
-    /// Initializes a VirtualStream instance with memory buffer size.
+    ///     Initializes a VirtualStream instance with memory buffer size.
     /// </summary>
     /// <param name="bufferSize">Memory buffer size</param>
     public VirtualStream(int bufferSize)
@@ -117,33 +114,33 @@ public sealed class VirtualStream : Stream, IDisposable
 
 
     /// <summary>
-    /// Initializes a VirtualStream instance with a default memory size and memory flag specified.
+    ///     Initializes a VirtualStream instance with a default memory size and memory flag specified.
     /// </summary>
     /// <param name="flag">Memory flag</param>
     public VirtualStream(MemoryFlag flag)
         : this(DefaultMemorySize, flag,
-            (flag == MemoryFlag.OnlyToDisk) ? CreatePersistentStream() : new MemoryStream())
+            flag == MemoryFlag.OnlyToDisk ? CreatePersistentStream() : new MemoryStream())
 
     {
     }
 
 
     /// <summary>
-    /// Initializes a VirtualStream instance with a memory buffer size and memory flag specified.
+    ///     Initializes a VirtualStream instance with a memory buffer size and memory flag specified.
     /// </summary>
     /// <param name="bufferSize">Memory buffer size</param>
     /// <param name="flag">Memory flag</param>
     public VirtualStream(int bufferSize, MemoryFlag flag)
         : this(bufferSize, flag,
-            (flag == MemoryFlag.OnlyToDisk) ? CreatePersistentStream() : new MemoryStream(bufferSize))
+            flag == MemoryFlag.OnlyToDisk ? CreatePersistentStream() : new MemoryStream(bufferSize))
 
     {
     }
 
 
     /// <summary>
-    /// Initializes a VirtualStream instance with a memory buffer size, memory flag and underlying stream
-    /// specified.
+    ///     Initializes a VirtualStream instance with a memory buffer size, memory flag and underlying stream
+    ///     specified.
     /// </summary>
     /// <param name="bufferSize">Memory buffer size</param>
     /// <param name="flag">Memory flag</param>
@@ -156,7 +153,7 @@ public sealed class VirtualStream : Stream, IDisposable
             throw new ArgumentNullException("dataStream");
 
 
-        isInMemory = (flag != MemoryFlag.OnlyToDisk);
+        isInMemory = flag != MemoryFlag.OnlyToDisk;
 
         memoryStatus = flag;
 
@@ -177,70 +174,71 @@ public sealed class VirtualStream : Stream, IDisposable
     }
 
 
+    #region IDisposable Interface
+
+    /// <summary>
+    ///     <see cref="IDisposeable.Dispose()" />
+    /// </summary>
+    /// <remarks>
+    ///     It will call <see cref="Close()" />
+    /// </remarks>
+    public void Dispose()
+
+    {
+        Close();
+    }
+
+    #endregion
+
+
     #region Stream Methods and Properties
 
     /// <summary>
-    /// Gets a flag indicating whether a stream can be read.
+    ///     Gets a flag indicating whether a stream can be read.
     /// </summary>
 
-    override public bool CanRead
-
-    {
-        get { return wrappedStream.CanRead; }
-    }
+    public override bool CanRead => wrappedStream.CanRead;
 
     /// <summary>
-    /// Gets a flag indicating whether a stream can be written.
+    ///     Gets a flag indicating whether a stream can be written.
     /// </summary>
 
-    override public bool CanWrite
-
-    {
-        get { return wrappedStream.CanWrite; }
-    }
+    public override bool CanWrite => wrappedStream.CanWrite;
 
     /// <summary>
-    /// Gets a flag indicating whether a stream can seek.
+    ///     Gets a flag indicating whether a stream can seek.
     /// </summary>
 
-    override public bool CanSeek
-
-    {
-        get { return true; }
-    }
+    public override bool CanSeek => true;
 
     /// <summary>
-    /// Returns the length of the source stream.
-    /// <seealso cref="GetLength()"/>
+    ///     Returns the length of the source stream.
+    ///     <seealso cref="GetLength()" />
     /// </summary>
 
-    override public long Length
+    public override long Length => wrappedStream.Length;
+
+
+    /// <summary>
+    ///     Gets or sets a position in the stream.
+    /// </summary>
+
+    public override long Position
 
     {
-        get { return wrappedStream.Length; }
+        get => wrappedStream.Position;
+
+        set => wrappedStream.Seek(value, SeekOrigin.Begin);
     }
 
 
     /// <summary>
-    /// Gets or sets a position in the stream.
-    /// </summary>
-
-    override public long Position
-
-    {
-        get { return wrappedStream.Position; }
-
-        set { wrappedStream.Seek(value, SeekOrigin.Begin); }
-    }
-
-
-    /// <summary>
-    /// <see cref="Stream.Close()"/>
+    ///     <see cref="Stream.Close()" />
     /// </summary>
     /// <remarks>
-    /// Calling other methods after calling Close() may result in a ObjectDisposedException beeing throwed.
+    ///     Calling other methods after calling Close() may result in a ObjectDisposedException beeing throwed.
     /// </remarks>
-    override public void Close()
+    public override void Close()
 
     {
         if (!isDisposed)
@@ -254,11 +252,11 @@ public sealed class VirtualStream : Stream, IDisposable
 
 
     /// <summary>
-    /// <see cref="Stream.Flush()"/>
+    ///     <see cref="Stream.Flush()" />
     /// </summary>
     /// <remarks>
     /// </remarks>
-    override public void Flush()
+    public override void Flush()
 
     {
         ThrowIfDisposed();
@@ -268,19 +266,19 @@ public sealed class VirtualStream : Stream, IDisposable
 
 
     /// <summary>
-    /// <see cref="Stream.Read()"/>
+    ///     <see cref="Stream.Read()" />
     /// </summary>
     /// <param name="buffer"></param>
     /// <param name="offset"></param>
     /// <param name="count"></param>
     /// <returns>
-    /// The number of bytes read
+    ///     The number of bytes read
     /// </returns>
     /// <remarks>
-    /// May throw <see cref="ObjectDisposedException"/>.
-    /// It will read from cached persistence stream
+    ///     May throw <see cref="ObjectDisposedException" />.
+    ///     It will read from cached persistence stream
     /// </remarks>
-    override public int Read(byte[] buffer, int offset, int count)
+    public override int Read(byte[] buffer, int offset, int count)
 
     {
         ThrowIfDisposed();
@@ -290,18 +288,18 @@ public sealed class VirtualStream : Stream, IDisposable
 
 
     /// <summary>
-    /// <see cref="Stream.Seek()"/>
+    ///     <see cref="Stream.Seek()" />
     /// </summary>
     /// <param name="offset"></param>
     /// <param name="origin"></param>
     /// <returns>
-    /// The current position
+    ///     The current position
     /// </returns>
     /// <remarks>
-    /// May throw <see cref="ObjectDisposedException"/>.
-    /// It will cache any new data into the persistence stream
+    ///     May throw <see cref="ObjectDisposedException" />.
+    ///     It will cache any new data into the persistence stream
     /// </remarks>
-    override public long Seek(long offset, SeekOrigin origin)
+    public override long Seek(long offset, SeekOrigin origin)
 
     {
         ThrowIfDisposed();
@@ -311,13 +309,13 @@ public sealed class VirtualStream : Stream, IDisposable
 
 
     /// <summary>
-    /// <see cref="Stream.SetLength()"/>
+    ///     <see cref="Stream.SetLength()" />
     /// </summary>
     /// <param name="length"></param>
     /// <remarks>
-    /// May throw <see cref="ObjectDisposedException"/>.
+    ///     May throw <see cref="ObjectDisposedException" />.
     /// </remarks>
-    override public void SetLength(long length)
+    public override void SetLength(long length)
 
     {
         ThrowIfDisposed();
@@ -334,7 +332,7 @@ public sealed class VirtualStream : Stream, IDisposable
 
             // Switching to Persist Stream
 
-            BufferedStream persistStream = new BufferedStream(CreatePersistentStream(), thresholdSize);
+            var persistStream = new BufferedStream(CreatePersistentStream(), thresholdSize);
 
 
             // Copy current wrapped memory stream to the persist stream
@@ -362,15 +360,15 @@ public sealed class VirtualStream : Stream, IDisposable
 
 
     /// <summary>
-    /// <see cref="Stream.Write()"/>
-    /// <param name="buffer"></param>
-    /// <param name="offset"></param>
-    /// <param name="count"></param>
+    ///     <see cref="Stream.Write()" />
+    ///     <param name="buffer"></param>
+    ///     <param name="offset"></param>
+    ///     <param name="count"></param>
     /// </summary>
     /// <remarks>
-    /// Write to the underlying stream.
+    ///     Write to the underlying stream.
     /// </remarks>
-    override public void Write(byte[] buffer, int offset, int count)
+    public override void Write(byte[] buffer, int offset, int count)
 
     {
         ThrowIfDisposed();
@@ -380,14 +378,14 @@ public sealed class VirtualStream : Stream, IDisposable
 
         if (memoryStatus == MemoryFlag.AutoOverFlowToDisk &&
             isInMemory &&
-            (count + wrappedStream.Position) > thresholdSize)
+            count + wrappedStream.Position > thresholdSize)
 
         {
             // Currently in memory, and the new write will push it over the limit
 
             // Switching to Persist Stream
 
-            BufferedStream persistStream = new BufferedStream(CreatePersistentStream(), thresholdSize);
+            var persistStream = new BufferedStream(CreatePersistentStream(), thresholdSize);
 
 
             // Copy current wrapped memory stream to the persist stream
@@ -414,28 +412,11 @@ public sealed class VirtualStream : Stream, IDisposable
     #endregion
 
 
-    #region IDisposable Interface
-
-    /// <summary>
-    /// <see cref="IDisposeable.Dispose()"/>
-    /// </summary>
-    /// <remarks>
-    /// It will call <see cref="Close()"/>
-    /// </remarks>
-    public void Dispose()
-
-    {
-        Close();
-    }
-
-    #endregion
-
-
     #region Private Utility Functions
 
     /// <summary>
-    /// Utility method called by the Finalize(), Close() or Dispose() to close and release
-    /// both the source and the persistence stream.
+    ///     Utility method called by the Finalize(), Close() or Dispose() to close and release
+    ///     both the source and the persistence stream.
     /// </summary>
     private void Cleanup()
 
@@ -457,7 +438,7 @@ public sealed class VirtualStream : Stream, IDisposable
 
 
     /// <summary>
-    /// Copies source memory stream to the target stream.
+    ///     Copies source memory stream to the target stream.
     /// </summary>
     /// <param name="source">Source memory stream</param>
     /// <param name="target">Target stream</param>
@@ -466,14 +447,14 @@ public sealed class VirtualStream : Stream, IDisposable
     {
         // Remember position for the source stream
 
-        long currentPosition = source.Position;
+        var currentPosition = source.Position;
 
 
         // Read and write in chunks each thresholdSize
 
-        byte[] tempBuffer = new Byte[thresholdSize];
+        var tempBuffer = new byte[thresholdSize];
 
-        int read = 0;
+        var read = 0;
 
 
         source.Position = 0;
@@ -497,8 +478,8 @@ public sealed class VirtualStream : Stream, IDisposable
 
 
     /// <summary>
-    /// Called by other methods to check the stream state.
-    /// It will thorw <see cref="ObjectDisposedException"/> if the stream was closed or disposed.
+    ///     Called by other methods to check the stream state.
+    ///     It will thorw <see cref="ObjectDisposedException" /> if the stream was closed or disposed.
     /// </summary>
     private void ThrowIfDisposed()
 
@@ -510,16 +491,16 @@ public sealed class VirtualStream : Stream, IDisposable
 
 
     /// <summary>
-    /// Utility method.
-    /// Creates a FileStream with a unique name and the temporary and delete-on-close attributes.
+    ///     Utility method.
+    ///     Creates a FileStream with a unique name and the temporary and delete-on-close attributes.
     /// </summary>
     /// <returns>
-    /// The temporary persistence stream
+    ///     The temporary persistence stream
     /// </returns>
     public static Stream CreatePersistentStream()
 
     {
-        StringBuilder name = new StringBuilder(256);
+        var name = new StringBuilder(256);
 
 
         IntPtr handle;
@@ -529,7 +510,7 @@ public sealed class VirtualStream : Stream, IDisposable
             throw new IOException("GetTempFileName Failed.", Marshal.GetHRForLastWin32Error());
 
 
-        handle = CreateFile(name.ToString(), (UInt32)FileAccess.ReadWrite, 0, IntPtr.Zero, (UInt32)FileMode.Create,
+        handle = CreateFile(name.ToString(), (uint)FileAccess.ReadWrite, 0, IntPtr.Zero, (uint)FileMode.Create,
             0x04000100, IntPtr.Zero);
 
 
@@ -540,11 +521,11 @@ public sealed class VirtualStream : Stream, IDisposable
 
 
     [DllImport("kernel32.dll")]
-    private static extern UInt32 GetTempFileName
+    private static extern uint GetTempFileName
     (
         string path,
         string prefix,
-        UInt32 unique,
+        uint unique,
         StringBuilder name
     );
 
@@ -553,11 +534,11 @@ public sealed class VirtualStream : Stream, IDisposable
     private static extern IntPtr CreateFile
     (
         string name,
-        UInt32 accessMode,
-        UInt32 shareMode,
+        uint accessMode,
+        uint shareMode,
         IntPtr security,
-        UInt32 createMode,
-        UInt32 flags,
+        uint createMode,
+        uint flags,
         IntPtr template
     );
 
