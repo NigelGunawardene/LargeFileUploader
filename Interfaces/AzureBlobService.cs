@@ -1,9 +1,11 @@
 ﻿using System.IO.Compression;
 using System.Security.Cryptography;
 using Azure.Storage.Blobs;
+using LargeFileUploader.Hubs;
 using LargeFileUploader.Services;
 using LargeFileUploader.Settings;
 using LargeFileUploader.Streaming;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 
@@ -13,9 +15,11 @@ public class AzureBlobService : IAzureBlobService
 {
     private readonly BlobServiceClient _blobServiceClient;
     private readonly AzureBlobStorageSettings _blobStorageSettings;
+    private readonly IHubContext<UserHub> _userHub;
 
-    public AzureBlobService(IOptions<AzureBlobStorageSettings> blobStorageSettings)
+    public AzureBlobService(IOptions<AzureBlobStorageSettings> blobStorageSettings, IHubContext<UserHub> userHub)
     {
+        _userHub = userHub;
         _blobStorageSettings = blobStorageSettings.Value;
         _blobServiceClient = new BlobServiceClient(_blobStorageSettings.ConnectionString);
     }
@@ -61,6 +65,7 @@ public class AzureBlobService : IAzureBlobService
 
             if (!string.IsNullOrEmpty(entry.Name))
             {
+                await _userHub.Clients.All.SendAsync(entry.Name);
                 await using var entryStream = new SeekStream(entry.Open(), Convert.ToInt32(entry.Length));
                 await AddFileToBlobStorage(entryStream, entry.Name);
             }

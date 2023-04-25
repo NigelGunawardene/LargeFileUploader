@@ -1,3 +1,4 @@
+using LargeFileUploader.Hubs;
 using LargeFileUploader.Interfaces;
 using LargeFileUploader.Services;
 using LargeFileUploader.Settings;
@@ -19,6 +20,16 @@ builder.Services.Configure<IISServerOptions>(options =>
     options.MaxRequestBodySize = int.MaxValue; // or your desired value
 });
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("CorsPolicy", builder => builder
+        .WithOrigins("http://localhost:4200")
+        .AllowAnyMethod()
+        .AllowAnyHeader()
+        .AllowCredentials());
+});
+
+builder.Services.AddSignalR();
 
 var app = builder.Build();
 
@@ -31,8 +42,12 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseCors("CorsPolicy");
+
 app.UseAuthorization();
 
 app.MapControllers();
+
+app.MapHub<UserHub>("/userhub");
 
 app.Run();

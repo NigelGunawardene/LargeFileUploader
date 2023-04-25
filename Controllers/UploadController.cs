@@ -1,4 +1,7 @@
+using Azure.Core;
 using LargeFileUploader.Attributes;
+using LargeFileUploader.Events.Args;
+using LargeFileUploader.Events.Delegates;
 using LargeFileUploader.Exceptions;
 using LargeFileUploader.Helpers;
 using LargeFileUploader.Services;
@@ -16,11 +19,29 @@ public class UploadController : ControllerBase
     private const long MaxFileSize = 10L * 1024L * 1024L * 1024L; // 10GB, adjust to your need
     private const int LengthLimit = 70;
     private readonly IAzureBlobService _azureBlobService;
-
+    
     public UploadController(IAzureBlobService azureBlobService)
     {
         _azureBlobService = azureBlobService;
+        this.OnEventHappened += new MyEventHandler(TestMyMethod);
     }
+
+    // testing events--------------------------------------------------
+    public event MyEventHandler OnEventHappened;
+
+
+    [HttpGet("[action]")]
+    public async Task TestEvent()
+    {
+        this.OnEventHappened?.Invoke(this,new MyEventArgs("hello there"));
+    }
+
+    private void TestMyMethod(object source, MyEventArgs e)
+    {
+        Console.WriteLine("event triggered");
+        Console.WriteLine(e.eventContent);
+    }
+    // ------------------------------------------------------------------
 
     [HttpPost]
     [DisableFormValueModelBinding]

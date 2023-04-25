@@ -1,51 +1,4 @@
-﻿//---------------------------------------------------------------------
-
-// File: VirtualStream.cs
-
-// 
-
-// Summary: A sample pipeline component which demonstrates how to promote message context
-
-//          properties and write distinguished fields for XML messages using arbitrary
-
-//          XPath expressions.
-
-//
-
-// Sample: Arbitrary XPath Property Handler Pipeline Component SDK 
-
-//
-
-//---------------------------------------------------------------------
-
-// This file is part of the Microsoft BizTalk Server 2006 SDK
-
-//
-
-// Copyright (c) Microsoft Corporation. All rights reserved.
-
-//
-
-// This source code is intended only as a supplement to Microsoft BizTalk
-
-// Server 2006 release and/or on-line documentation. See these other
-
-// materials for detailed information regarding Microsoft code samples.
-
-//
-
-// THIS CODE AND INFORMATION ARE PROVIDED "AS IS" WITHOUT WARRANTY OF ANY
-
-// KIND, WHETHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
-
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A PARTICULAR
-
-// PURPOSE.
-
-//---------------------------------------------------------------------
-
-
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
 
@@ -57,24 +10,18 @@ namespace LargeFileUploader.Streaming;
 ///     temporarily stores remaining data in a temporary file on disk.
 /// </summary>
 public sealed class VirtualStream : Stream, IDisposable
-
 {
     /// <summary>
     ///     Memory handling.
     /// </summary>
     public enum MemoryFlag
-
     {
         AutoOverFlowToDisk = 0,
-
         OnlyInMemory = 1,
-
         OnlyToDisk = 2
     }
-
-
+    
     // Constants
-
     private const int MemoryThreshold = 4 * 1024 * 1024; // The maximum possible memory consumption (4Mb)
 
     private const int DefaultMemorySize = 4 * 1024; // Default memory consumption (4Kb)
@@ -87,20 +34,16 @@ public sealed class VirtualStream : Stream, IDisposable
 
     private readonly int thresholdSize;
 
-
     private Stream wrappedStream;
-
-
+    
     /// <summary>
     ///     Initializes a VirtualStream instance with default parameters (10K memory buffer,
     ///     allow overflow to disk).
     /// </summary>
     public VirtualStream()
         : this(DefaultMemorySize, MemoryFlag.AutoOverFlowToDisk, new MemoryStream())
-
     {
     }
-
 
     /// <summary>
     ///     Initializes a VirtualStream instance with memory buffer size.
@@ -108,10 +51,8 @@ public sealed class VirtualStream : Stream, IDisposable
     /// <param name="bufferSize">Memory buffer size</param>
     public VirtualStream(int bufferSize)
         : this(bufferSize, MemoryFlag.AutoOverFlowToDisk, new MemoryStream(bufferSize))
-
     {
     }
-
 
     /// <summary>
     ///     Initializes a VirtualStream instance with a default memory size and memory flag specified.
@@ -120,11 +61,9 @@ public sealed class VirtualStream : Stream, IDisposable
     public VirtualStream(MemoryFlag flag)
         : this(DefaultMemorySize, flag,
             flag == MemoryFlag.OnlyToDisk ? CreatePersistentStream() : new MemoryStream())
-
     {
     }
-
-
+    
     /// <summary>
     ///     Initializes a VirtualStream instance with a memory buffer size and memory flag specified.
     /// </summary>
@@ -133,11 +72,9 @@ public sealed class VirtualStream : Stream, IDisposable
     public VirtualStream(int bufferSize, MemoryFlag flag)
         : this(bufferSize, flag,
             flag == MemoryFlag.OnlyToDisk ? CreatePersistentStream() : new MemoryStream(bufferSize))
-
     {
     }
-
-
+    
     /// <summary>
     ///     Initializes a VirtualStream instance with a memory buffer size, memory flag and underlying stream
     ///     specified.
@@ -146,28 +83,18 @@ public sealed class VirtualStream : Stream, IDisposable
     /// <param name="flag">Memory flag</param>
     /// <param name="dataStream">Underlying stream</param>
     private VirtualStream(int bufferSize, MemoryFlag flag, Stream dataStream)
-
     {
         if (null == dataStream)
-
             throw new ArgumentNullException("dataStream");
-
-
+        
         isInMemory = flag != MemoryFlag.OnlyToDisk;
-
         memoryStatus = flag;
-
         bufferSize = Math.Min(bufferSize, MemoryThreshold);
-
         thresholdSize = bufferSize;
 
-
         if (isInMemory)
-
             wrappedStream = dataStream; // Don't want to double wrap memory stream
-
         else
-
             wrappedStream = new BufferedStream(dataStream, bufferSize);
 
         isDisposed = false;
